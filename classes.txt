@@ -1,0 +1,7 @@
+fire
+flood
+damaged_structure
+exposed_powerline
+debris
+landslide
+chemical_spill

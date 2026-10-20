@@ -1,0 +1,4 @@
+# Hailo Model Optimization Script (.alls)
+# Configured specifically for low-class YOLOv8 models on Hailo-8
+model_optimization_flavor(optimization_level=1, compression_level=0, batch_size=2)
+performance_param(fps=30)

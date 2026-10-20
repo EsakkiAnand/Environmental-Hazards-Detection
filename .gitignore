@@ -1,0 +1,40 @@
+# Python virtual environment
+hazard-env/
+
+# Python bytecode cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# PyTorch pretrained base weights (large, not project-specific)
+yolov8n.pt
+yolov8s.pt
+yolo11n.pt
+
+# Training run outputs (very large, auto-generated)
+runs/
+
+# Datasets (external)
+dataset/
+
+# Environment / secrets
+.env
+*.env
+
+# OS
+Thumbs.db
+.DS_Store
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Logs & temp
+*.log
+*.tmp
+*.bak
