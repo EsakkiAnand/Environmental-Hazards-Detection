@@ -1,4 +1,8 @@
 # Hailo Model Optimization Script (.alls)
-# Configured specifically for low-class YOLOv8 models on Hailo-8
+# Seraph Zenith Mark 1 — 6-class YOLOv8 hazard model on Hailo-8
 model_optimization_flavor(optimization_level=1, compression_level=0, batch_size=2)
 performance_param(fps=30)
+
+# Explicit hardware-level NMS post-processing configuration
+# Prevents low-confidence noise from entering the output tensor (6, 5, 100)
+nms_postprocess(meta_arch=yolov8, engine=cpu, nms_scores_th=0.40, nms_iou_th=0.45, classes=6)
