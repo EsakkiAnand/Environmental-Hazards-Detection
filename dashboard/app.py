@@ -16,6 +16,7 @@ import streamlit as st
 import time
 import cv2
 import numpy as np
+import matplotlib.pyplot as plt
 
 # Set Streamlit Page Configuration
 st.set_page_config(
