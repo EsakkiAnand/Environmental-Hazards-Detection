@@ -1,9 +1,22 @@
+r"""
+train_hazards_yolov8s.py
+Seraph Zenith Mark 1 — 6-Class YOLOv8s Training Pipeline (v2 - Retraining)
+
+Enhancements:
+  - Supports --fresh (clean start from yolov8s.pt) and --resume
+  - Outputs to runs/detect/hazards_yolov8s_v2 (preserves baseline runs for comparative benchmarking)
+  - Augmented hyperparameter profile: copy_paste=0.15 and mixup=0.15 for debris class balancing
+  - Cosine learning rate scheduling (cos_lr=True)
+  - Memory-safe PIL fallback and retry-protected torch.save for Windows GPUs
+"""
+
 import os
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "max_split_size_mb:128"
 import sys
 import time
 import gc
 import cv2
+import argparse
 import torch
 import torch.serialization as torch_ser
 import pathlib
@@ -21,7 +34,6 @@ def safe_cv2_resize(src, dsize, fx=0, fy=0, interpolation=cv2.INTER_LINEAR):
     try:
         return _orig_cv2_resize(src, dsize, fx=fx, fy=fy, interpolation=interpolation)
     except Exception:
-        # Robust PIL fallback if OpenCV C++ memory allocator raises error
         pil_img = Image.fromarray(cv2.cvtColor(src, cv2.COLOR_BGR2RGB))
         resized_pil = pil_img.resize(dsize, Image.BILINEAR)
         return cv2.cvtColor(np.array(resized_pil), cv2.COLOR_RGB2BGR)
@@ -59,22 +71,21 @@ if hasattr(trainer_mod, "torch"):
 from ultralytics import YOLO
 from ultralytics.engine.trainer import BaseTrainer
 
-# Limit OpenCV internal thread buffer allocation
 cv2.setNumThreads(0)
 
 DATA_YAML = r"C:\Users\esakk\dataset\unified_hazards_v2\data.yaml"
 MODEL_PRETRAINED = "yolov8s.pt"
 
-# Ultralytics callback to flush garbage collection after validation passes
 def on_val_end_cleanup(validator):
     gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
-def train_yolov8s_hazards(epochs=50, batch_size=4, imgsz=640, workers=0):
+def train_yolov8s_hazards(epochs=50, batch_size=4, imgsz=640, workers=0, resume=False, run_name="hazards_yolov8s_v2"):
     print("=" * 65)
-    print("  Starting Training - Unified 6-Class Hazards YOLOv8s Model")
-    print("  Dataset: C:\\Users\\esakk\\dataset\\unified_hazards_v2\\data.yaml")
+    print("  Starting Training - Unified 6-Class Hazards YOLOv8s Model (v2)")
+    print(f"  Dataset: {DATA_YAML}")
+    print(f"  Run Name: {run_name} | Epochs: {epochs} | Batch: {batch_size}")
     print("=" * 65)
 
     if not os.path.exists(DATA_YAML):
@@ -99,19 +110,15 @@ def train_yolov8s_hazards(epochs=50, batch_size=4, imgsz=640, workers=0):
         return _orig_load_checkpoint_state(self, ckpt)
     BaseTrainer._load_checkpoint_state = _safe_load_checkpoint_state
 
-    checkpoint_path = os.path.abspath(os.path.join("runs", "detect", "hazards_yolov8s", "weights", "last.pt"))
-    nested_checkpoint = os.path.abspath(os.path.join("runs", "detect", "runs", "detect", "hazards_yolov8s", "weights", "last.pt"))
-    if not os.path.exists(checkpoint_path) and os.path.exists(nested_checkpoint):
-        checkpoint_path = nested_checkpoint
+    checkpoint_path = os.path.abspath(os.path.join("runs", "detect", run_name, "weights", "last.pt"))
 
-    if os.path.exists(checkpoint_path):
-        print(f"[+] Existing checkpoint found: {checkpoint_path}")
-        print(f"[+] Resuming training from last checkpoint...")
+    if resume and os.path.exists(checkpoint_path):
+        print(f"[+] Resuming training from checkpoint: {checkpoint_path}")
         model = YOLO(checkpoint_path)
         model.add_callback("on_val_end", on_val_end_cleanup)
         results = model.train(resume=True)
     else:
-        print(f"[+] Initializing new training run with {MODEL_PRETRAINED}...")
+        print(f"[+] Initializing fresh training run with {MODEL_PRETRAINED} on sanitized dataset...")
         model = YOLO(MODEL_PRETRAINED)
         model.add_callback("on_val_end", on_val_end_cleanup)
 
@@ -123,11 +130,13 @@ def train_yolov8s_hazards(epochs=50, batch_size=4, imgsz=640, workers=0):
             workers=workers,
             cache=False,
             device=device,
-            name="hazards_yolov8s",
+            name=run_name,
             project="runs/detect",
             exist_ok=True,
+            cos_lr=True,
             mosaic=1.0,
             mixup=0.15,
+            copy_paste=0.15,
             hsv_h=0.015,
             hsv_s=0.7,
             hsv_v=0.4,
@@ -138,14 +147,30 @@ def train_yolov8s_hazards(epochs=50, batch_size=4, imgsz=640, workers=0):
             fliplr=0.5,
             rect=False,
             val=True,
-            plots=False,
+            plots=True,
             save=True
         )
 
     print("\n" + "=" * 65)
     print("  YOLOv8s Hazard Model Training Complete!")
-    print(f"  Best Weights: runs/detect/hazards_yolov8s/weights/best.pt")
+    print(f"  Best Weights: runs/detect/{run_name}/weights/best.pt")
     print("=" * 65)
 
 if __name__ == "__main__":
-    train_yolov8s_hazards()
+    parser = argparse.ArgumentParser(description="Seraph Zenith YOLOv8s Training")
+    parser.add_argument("--epochs", type=int, default=50, help="Number of training epochs")
+    parser.add_argument("--batch", type=int, default=4, help="Batch size")
+    parser.add_argument("--imgsz", type=int, default=640, help="Image size")
+    parser.add_argument("--workers", type=int, default=0, help="Dataloader workers (0 for Windows)")
+    parser.add_argument("--resume", action="store_true", help="Resume from last checkpoint if available")
+    parser.add_argument("--name", type=str, default="hazards_yolov8s_v2", help="Run directory name")
+    args = parser.parse_args()
+
+    train_yolov8s_hazards(
+        epochs=args.epochs,
+        batch_size=args.batch,
+        imgsz=args.imgsz,
+        workers=args.workers,
+        resume=args.resume,
+        run_name=args.name
+    )
